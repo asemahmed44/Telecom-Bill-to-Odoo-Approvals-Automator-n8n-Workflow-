@@ -1,0 +1,317 @@
+{
+  "name": "Orange Bill Apr 2026 → Odoo Approvals",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "5260c90b-9344-458d-8675-f7c0d63dbdd1",
+      "name": "▶️ Run Once",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const phones = [\n  { phone_number: '01278587748', amount: 184.68 },\n  { phone_number: '01227706332', amount: 194.53 },\n  { phone_number: '01208883991', amount: 30.78  },\n  { phone_number: '01278587787', amount: 184.68 },\n  { phone_number: '01226800885', amount: 77.57  },\n  { phone_number: '01208883884', amount: 188.37 },\n  { phone_number: '01227662551', amount: 73.87  },\n  { phone_number: '01208886888', amount: 482.74 },\n];\nconst sd = $getWorkflowStaticData('global');\nsd.approvalIds = []; sd.missingProducts = []; sd.errors = []; sd.total = phones.length;\nreturn phones.map(p => ({ json: p }));"
+      },
+      "id": "ca38fa55-a84d-407a-aebb-3c07e8ce6b6e",
+      "name": "📋 Load PDF Phone Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst approvalIds = sd.approvalIds || [];\nconst missing     = sd.missingProducts || [];\nconst errors      = sd.errors || [];\nconst total       = sd.total || 8;\nreturn [{\n  json: {\n    total_phones:      total,\n    approvals_created: approvalIds.length,\n    missing_products:  missing.length,\n    errors:            errors.length,\n    approvals:         approvalIds,\n    missing,\n    errors\n  }\n}];"
+      },
+      "id": "39659460-8290-4c2e-97bd-5d364c805acc",
+      "name": "📊 Final Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "custom",
+        "customResource": "product.template",
+        "operation": "getAll",
+        "limit": 1,
+        "options": {
+          "fieldsList": [
+            "id",
+            "name",
+            "default_code"
+          ]
+        },
+        "filterRequest": {
+          "filter": [
+            {
+              "fieldName": "name",
+              "value": "={{ $json.phone_number }}"
+            }
+          ]
+        }
+      },
+      "id": "843e78e9-7c80-4f97-b993-8c5e4ca1c8d4",
+      "name": "🔎 Search Product by Phone",
+      "type": "n8n-nodes-base.odoo",
+      "typeVersion": 1,
+      "position": [
+        672,
+        192
+      ],
+      "credentials": {
+        "odooApi": {
+          "id": "3EY4tEpK2aKxIhpI",
+          "name": "odoo test database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst loopItem = $('🔄 Loop Per Phone').item.json;\nconst phoneNumber = loopItem.phone_number;\nconst amount = loopItem.amount;\nconst allItems = $input.all();\nconst products = allItems.map(i => i.json).filter(p => p && p.id && typeof p.id === 'number');\nif (!products || products.length === 0) {\n  const m = sd.missingProducts || []; m.push({ phone: phoneNumber, amount }); sd.missingProducts = m;\n  return [{ json: { _skip: true, phone: phoneNumber } }];\n}\nconst product = products[0];\nreturn [{ json: { _skip: false, phone_number: phoneNumber, amount, product_id: product.id, approval_name: 'Telephone Bill - ' + phoneNumber + ' - April 2026' } }];"
+      },
+      "id": "6484fec0-182c-4145-9ca4-2b637ad43763",
+      "name": "🧩 Check Product & Prepare",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "05b1283c-b274-4935-a9af-7336c4cf9bcd",
+      "name": "🚦 Product Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "custom",
+        "customResource": "approval.request",
+        "fieldsToCreateOrUpdate": {
+          "fields": [
+            {
+              "fieldName": "name",
+              "fieldValue": "={{ $json.approval_name }}"
+            },
+            {
+              "fieldName": "category_id",
+              "fieldValue": "=554"
+            },
+            {
+              "fieldName": "request_owner_id",
+              "fieldValue": "=909"
+            },
+            {
+              "fieldName": "date",
+              "fieldValue": "={{ new Date().toISOString().split('T')[0] }}"
+            },
+            {
+              "fieldName": "reason",
+              "fieldValue": "=Monthly telephone charge for {{ $json.phone_number }}"
+            },
+            {
+              "fieldName": "product_line_ids",
+              "fieldValue": "={{ [[0, 0, {\"product_id\": $json.product_id, \"quantity\": 1.0, \"price_unit\": $json.amount, \"description\": \"Monthly telephone charge for \" + $json.phone_number}]] }}"
+            }
+          ]
+        }
+      },
+      "id": "40a6274f-4e28-41d9-8325-cf98ff4a39b3",
+      "name": "📝 Create Approval Request",
+      "type": "n8n-nodes-base.odoo",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        192
+      ],
+      "credentials": {
+        "odooApi": {
+          "id": "Zb4G4MMWYWjxblp3",
+          "name": "Admin Credititional"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst phoneData = $('🚦 Product Found?').item.json;\nconst sd = $getWorkflowStaticData('global');\nconst approvalId = response?.id || response?.result;\nif (!approvalId || typeof approvalId !== 'number') {\n  const e = sd.errors || []; e.push({ phone: phoneData.phone_number, error: JSON.stringify(response) }); sd.errors = e;\n  return [{ json: { _error: true, phone: phoneData.phone_number } }];\n}\nconst ids = sd.approvalIds || []; ids.push({ id: approvalId, phone: phoneData.phone_number, amount: phoneData.amount }); sd.approvalIds = ids;\nreturn [{ json: { approvalId, phone: phoneData.phone_number, amount: phoneData.amount } }];"
+      },
+      "id": "f86dfef0-e0ff-4bd5-b3c9-c3eaa61e05c2",
+      "name": "💾 Save Approval ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "57669fe2-726c-4d05-83c1-8dfce117e4d6",
+      "name": "🔄 Loop Per Phone",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        368,
+        176
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "▶️ Run Once": {
+      "main": [
+        [
+          {
+            "node": "📋 Load PDF Phone Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📋 Load PDF Phone Data": {
+      "main": [
+        [
+          {
+            "node": "🔄 Loop Per Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔎 Search Product by Phone": {
+      "main": [
+        [
+          {
+            "node": "🧩 Check Product & Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧩 Check Product & Prepare": {
+      "main": [
+        [
+          {
+            "node": "🚦 Product Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚦 Product Found?": {
+      "main": [
+        [
+          {
+            "node": "📝 Create Approval Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔄 Loop Per Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Create Approval Request": {
+      "main": [
+        [
+          {
+            "node": "💾 Save Approval ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "💾 Save Approval ID": {
+      "main": [
+        [
+          {
+            "node": "🔄 Loop Per Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 Loop Per Phone": {
+      "main": [
+        [
+          {
+            "node": "📊 Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔎 Search Product by Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "b9231995-98f1-431f-8f5f-c542589d739c",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "f2bc043fe69d31a15311aa2cd21b3ee292a856ab9721a5e17b127c2d9716878a"
+  },
+  "id": "614Q8mi72MkbjhEy",
+  "tags": []
+}
